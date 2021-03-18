@@ -14,9 +14,9 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class ReadersWriters {
-    public static final int[] READERS_NUMBER = new int[]{5, 10, 50, 500, 10000, 1000000};
-    public static final int[] WRITERS_NUMBER = new int[]{5, 10, 50, 500, 10000, 1000000};
-    public static final int MAX_READERS_NUMBER = 2;
+    public static final int[] READERS_NUMBER = new int[]{5, 10, 50, 500, 10000, 100000};
+    public static final int[] WRITERS_NUMBER = new int[]{5, 10, 50, 500, 10000, 100000};
+    public static final double[] PARALLEL_READERS_RATE = new double[]{0.3, 0.6, 0.9};
 
     /**
      * Starts the tasks (only runtime measure for now).
@@ -27,27 +27,33 @@ public class ReadersWriters {
             System.out.println("You have to provide a path (where the results will be saved) as a command line argument!");
         }
         else{
-            double[][] runTimes = runScalingExamination(new Stopwatch());
+            Collection<RuntimeResultDto> runtimeResults = new ArrayList<>();
+
+            for(double parallelReadersRate : PARALLEL_READERS_RATE){
+                double[][] runTimesTable = runScalingExamination(new Stopwatch(), parallelReadersRate);
+                runtimeResults.add(new RuntimeResultDto(parallelReadersRate, runTimesTable));
+                System.out.println("Runtime measure is ready forgit stT: rate " + parallelReadersRate * 100 + "%");
+            }
 
             System.out.println("Saving runtime results...");
-            System.out.println(Utils.saveResult(READERS_NUMBER, WRITERS_NUMBER, runTimes, args[0]));
+            System.out.println(Utils.saveResult(READERS_NUMBER, WRITERS_NUMBER, runtimeResults, args[0]));
         }
     }
 
-    private static double[][] runScalingExamination(Stopwatch stopwatch){
+    private static double[][] runScalingExamination(Stopwatch stopwatch, double parallelReadersRate){
         double[][] resultMatrix = new double[WRITERS_NUMBER.length][READERS_NUMBER.length];
 
         for(int wIndex = 0; wIndex < WRITERS_NUMBER.length; wIndex++){
             for(int rIndex = 0; rIndex < WRITERS_NUMBER.length; rIndex++){
                 resultMatrix[wIndex][rIndex] =
-                        (double)runReadersWritersWithParams(READERS_NUMBER[rIndex], WRITERS_NUMBER[wIndex], MAX_READERS_NUMBER, true, stopwatch) / 1000;
+                        (double)runReadersWritersWithParams(READERS_NUMBER[rIndex], WRITERS_NUMBER[wIndex], parallelReadersRate, true, stopwatch) / 1000;
             }
         }
         return resultMatrix;
     }
 
-    private static long runReadersWritersWithParams(int readersNumber, int writersNumber, int maxReaders, boolean wakeUpAllReaders, Stopwatch stopwatch){
-        Book book = new Book(maxReaders, wakeUpAllReaders);
+    private static long runReadersWritersWithParams(int readersNumber, int writersNumber, double parallelReadersRate, boolean wakeUpAllReaders, Stopwatch stopwatch){
+        Book book = new Book(calculateMaxReaders(readersNumber, parallelReadersRate), wakeUpAllReaders);
         Collection<Thread> readersAndWriters = new ArrayList<>();
 
         stopwatch.start();
@@ -77,15 +83,43 @@ public class ReadersWriters {
         threadCollection.add(thread);
         return thread;
     }
+
+    /**
+     * Calculates the
+     * @param readersNumber Total number of readers.
+     * @param readersRate Rate of readers can be work parallel. Must be a number in range ]0;1].
+     * @return How many readers can work in parallel. If the result is not an integer it will be rounded up to the next integer value.
+     */
+    private static int calculateMaxReaders(int readersNumber, double readersRate){
+        return (int) Math.ceil(readersNumber * readersRate);
+    }
+}
+
+class RuntimeResultDto {
+    private double[][] runtimeTable;
+    private double parallelReadersRate;
+
+    public RuntimeResultDto(double parallelReadersRate, double[][] runtimeTable){
+        this.parallelReadersRate = parallelReadersRate;
+        this.runtimeTable = runtimeTable;
+    }
+
+    public double[][] getRuntimeTable() {
+        return runtimeTable;
+    }
+
+    public double getParallelReadersRate() {
+        return parallelReadersRate;
+    }
 }
 
 class Utils {
-    public static String saveResult(int[] readersConfigs, int[] writersConfigs, double[][] runTimeTableRows, String targetPath){
+    public static String saveResult(int[] readersConfigs, int[] writersConfigs, Collection<RuntimeResultDto> runtimeResults, String targetPath){
         String errorMessage = null;
         File resultFile = new File(targetPath);
         try{
             resultFile.createNewFile();
-            saveRunTimesAsCsv(readersConfigs, writersConfigs, runTimeTableRows, resultFile);
+            saveRunTimesAsCsv(readersConfigs, writersConfigs, runtimeResults, resultFile);
         }
         catch(FileNotFoundException fileNotFoundException){
             errorMessage = String.format("A problem occurred while saving results to %s", targetPath);
@@ -97,8 +131,8 @@ class Utils {
     }
 
 
-    public static void saveRunTimesAsCsv(int[] readersConfigs, int[] writersConfigs, double[][] runTimeTableRows, File targetFile) throws FileNotFoundException{
-        Collection<String[]> csvLines = produceDataLines(readersConfigs, writersConfigs, runTimeTableRows);
+    public static void saveRunTimesAsCsv(int[] readersConfigs, int[] writersConfigs, Collection<RuntimeResultDto> runtimeResults, File targetFile) throws FileNotFoundException{
+        Collection<String[]> csvLines = produceDataLines(readersConfigs, writersConfigs, runtimeResults);
 
         try (PrintWriter pw = new PrintWriter(targetFile)) {
             csvLines.stream()
@@ -107,8 +141,20 @@ class Utils {
         }
     }
 
-    private static Collection<String[]> produceDataLines(int[] readersConfigs, int[] writersConfigs, double[][] runTimeTableRows){
+    private static Collection<String[]> produceDataLines(int[] readersConfigs, int[] writersConfigs, Collection<RuntimeResultDto> runtimeResults){
         ArrayList<String[]> lines = new ArrayList<>();
+
+        for(RuntimeResultDto resultsForOneRate : runtimeResults){
+            lines.addAll(produceDataLinesForOneParallelReadersRate(readersConfigs, writersConfigs, resultsForOneRate));
+        }
+
+        return lines;
+    }
+
+    private static Collection<String[]> produceDataLinesForOneParallelReadersRate(int[] readersConfigs, int[] writersConfigs, RuntimeResultDto resultsForOneRate){
+        ArrayList<String[]> lines = new ArrayList<>();
+
+        lines.add(new String[]{"Parallel readers rate:", resultsForOneRate.getParallelReadersRate() * 100 + "%"});
 
         String[] firstLine = new String[readersConfigs.length + 1];
 
@@ -124,7 +170,7 @@ class Utils {
 
             line[0] = String.valueOf(writersConfigs[i]);
             for(int j = 0; j < readersConfigs.length; j++){
-                line[j + 1] = String.valueOf(runTimeTableRows[i][j]);
+                line[j + 1] = String.valueOf(resultsForOneRate.getRuntimeTable()[i][j]);
             }
 
             lines.add(line);
