@@ -8,15 +8,16 @@ import java.io.File;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.util.ArrayList;
-import java.util.Collection;
+import java.util.*;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class ReadersWriters {
-    public static final int[] READERS_NUMBER = new int[]{5, 10, 50, 500, 10000, 100000};
-    public static final int[] WRITERS_NUMBER = new int[]{5, 10, 50, 500, 10000, 100000};
-    public static final double[] PARALLEL_READERS_RATE = new double[]{0.3, 0.6, 0.9};
+    private static final int[] READERS_NUMBER = new int[]{5, 10, 50, 500, 10000, 100000};
+    private static final int[] WRITERS_NUMBER = new int[]{5, 10, 50, 500, 10000, 100000};
+    private static final double[] PARALLEL_READERS_RATE = new double[]{0.3, 0.6, 0.9};
+    private static final Collection<Integer> READERS_IN_A_ROW = Collections.synchronizedCollection(new ArrayList<>());
+    private static boolean WAKE_UP_ALL_READERS;
 
     /**
      * Starts the tasks (only runtime measure for now).
@@ -26,17 +27,21 @@ public class ReadersWriters {
         if(args.length == 0 || args[0].trim().isEmpty()){
             System.out.println("You have to provide a path (where the results will be saved) as a command line argument!");
         }
+        else if(args.length == 1 || (args[1].toLowerCase(Locale.ROOT) == "true" && args[1].toLowerCase(Locale.ROOT) == "false" )){
+            System.out.println("You have specify if all readers has to be woken up (true/false) after the file path as a command line parameter!");
+        }
         else{
+            WAKE_UP_ALL_READERS = Boolean.valueOf(args[1]);
             Collection<RuntimeResultDto> runtimeResults = new ArrayList<>();
 
             for(double parallelReadersRate : PARALLEL_READERS_RATE){
                 double[][] runTimesTable = runScalingExamination(new Stopwatch(), parallelReadersRate);
                 runtimeResults.add(new RuntimeResultDto(parallelReadersRate, runTimesTable));
-                System.out.println("Runtime measure is ready forgit stT: rate " + parallelReadersRate * 100 + "%");
+                System.out.println("Runtime measure is ready for: rate " + parallelReadersRate * 100 + "%");
             }
 
             System.out.println("Saving runtime results...");
-            System.out.println(Utils.saveResult(READERS_NUMBER, WRITERS_NUMBER, runtimeResults, args[0]));
+            System.out.println(Utils.saveResult(READERS_NUMBER, WRITERS_NUMBER, runtimeResults, READERS_IN_A_ROW, WAKE_UP_ALL_READERS, args[0]));
         }
     }
 
@@ -46,7 +51,7 @@ public class ReadersWriters {
         for(int wIndex = 0; wIndex < WRITERS_NUMBER.length; wIndex++){
             for(int rIndex = 0; rIndex < WRITERS_NUMBER.length; rIndex++){
                 resultMatrix[wIndex][rIndex] =
-                        (double)runReadersWritersWithParams(READERS_NUMBER[rIndex], WRITERS_NUMBER[wIndex], parallelReadersRate, true, stopwatch) / 1000;
+                        (double)runReadersWritersWithParams(READERS_NUMBER[rIndex], WRITERS_NUMBER[wIndex], parallelReadersRate, WAKE_UP_ALL_READERS, stopwatch) / 1000;
             }
         }
         return resultMatrix;
@@ -62,7 +67,7 @@ public class ReadersWriters {
                 addThread(readersAndWriters, new Reader(book)).start();
             }
             if(i < writersNumber){
-                addThread(readersAndWriters, new Writer(book)).start();
+                addThread(readersAndWriters, new Writer(book, READERS_IN_A_ROW)).start();
             }
             if(i >= readersNumber && i >= writersNumber){
                 break;
@@ -114,25 +119,29 @@ class RuntimeResultDto {
 }
 
 class Utils {
-    public static String saveResult(int[] readersConfigs, int[] writersConfigs, Collection<RuntimeResultDto> runtimeResults, String targetPath){
+    public static String saveResult(
+            int[] readersConfigs, int[] writersConfigs, Collection<RuntimeResultDto> runtimeResults, Collection<Integer> readersInARowResults, boolean wakingUpAllReaders, String targetPath
+    ){
         String errorMessage = null;
         File resultFile = new File(targetPath);
         try{
             resultFile.createNewFile();
-            saveRunTimesAsCsv(readersConfigs, writersConfigs, runtimeResults, resultFile);
-        }
-        catch(FileNotFoundException fileNotFoundException){
-            errorMessage = String.format("A problem occurred while saving results to %s", targetPath);
+            saveResultsAsCsv(readersConfigs, writersConfigs, runtimeResults, readersInARowResults, wakingUpAllReaders, resultFile);
         }
         catch (IOException ioException){
-            errorMessage = String.format("A problem occurred while creating the result file %s", targetPath);
+            errorMessage = String.format("An I/O problem occurred while creating the result file %s", targetPath);
+        }
+        catch(Exception e){
+            errorMessage = String.format("A problem occurred while saving results to '%s'", targetPath);
         }
         return errorMessage == null ? String.format("Results successfully saved to %s", targetPath) : errorMessage;
     }
 
 
-    public static void saveRunTimesAsCsv(int[] readersConfigs, int[] writersConfigs, Collection<RuntimeResultDto> runtimeResults, File targetFile) throws FileNotFoundException{
-        Collection<String[]> csvLines = produceDataLines(readersConfigs, writersConfigs, runtimeResults);
+    private static void saveResultsAsCsv(
+            int[] readersConfigs, int[] writersConfigs, Collection<RuntimeResultDto> runtimeResults, Collection<Integer> readersInARowResults, boolean wakingUpAllReaders, File targetFile
+    ) throws FileNotFoundException{
+        Collection<String[]> csvLines = produceDataLines(readersConfigs, writersConfigs, runtimeResults, readersInARowResults, wakingUpAllReaders);
 
         try (PrintWriter pw = new PrintWriter(targetFile)) {
             csvLines.stream()
@@ -141,12 +150,15 @@ class Utils {
         }
     }
 
-    private static Collection<String[]> produceDataLines(int[] readersConfigs, int[] writersConfigs, Collection<RuntimeResultDto> runtimeResults){
+    private static Collection<String[]> produceDataLines(
+            int[] readersConfigs, int[] writersConfigs, Collection<RuntimeResultDto> runtimeResults, Collection<Integer> readersInARowResults, boolean wakingUpAllReaders
+    ){
         ArrayList<String[]> lines = new ArrayList<>();
 
         for(RuntimeResultDto resultsForOneRate : runtimeResults){
             lines.addAll(produceDataLinesForOneParallelReadersRate(readersConfigs, writersConfigs, resultsForOneRate));
         }
+        lines.addAll(appendReadersInARowResults(readersInARowResults, wakingUpAllReaders));
 
         return lines;
     }
@@ -174,6 +186,24 @@ class Utils {
             }
 
             lines.add(line);
+        }
+
+        return lines;
+    }
+
+    private static Collection<String[]> appendReadersInARowResults(Collection<Integer> readersInARowResults, boolean wakingUpAllReaders){
+        int topRecordCount =  readersInARowResults.size() <= 100 ? readersInARowResults.size() : 100;
+        ArrayList<String[]> lines = new ArrayList<>();
+
+        lines.add(new String[]{"Waking up all readers:", String.valueOf(wakingUpAllReaders)});
+        lines.add(new String[]{String.format("%d highest value", topRecordCount)});
+
+        List<Object> list = Arrays.asList(readersInARowResults.toArray());
+        Collections.sort(list, Collections.reverseOrder());
+        Object[] largestValues = list.stream().limit(100).toArray();
+
+        for(Object value : largestValues){
+            lines.add(new String[]{String.valueOf(value)});
         }
 
         return lines;

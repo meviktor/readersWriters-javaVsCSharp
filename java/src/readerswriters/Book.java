@@ -11,6 +11,8 @@ class Book {
     private int readersNumber;
     private boolean isWriting = false;
 
+    private int readersInARowCounter;
+
     private ReentrantLock lock = new ReentrantLock();
     private Condition writing = lock.newCondition();
     private Condition reading = lock.newCondition();
@@ -19,6 +21,7 @@ class Book {
         super();
         this.maxReaders = maxReaders;
         this.wakeUpAllReaders = wakeUpAllReaders;
+        this.readersInARowCounter = 0;
     }
 
     public void enterWriting(){
@@ -39,11 +42,18 @@ class Book {
         lock.unlock();
     }
 
-    public void leaveWriting(){
+    /**
+     * Writer leaves its critical section.
+     * @returns The number of readers entered in a row before a writer got the resource.
+     */
+    public int leaveWriting(){
         lock.lock();
 
         isWriting = false;
-        if (this.wakeUpAllReaders) {
+        int tmpCounter = readersInARowCounter;
+        readersInARowCounter = 0;
+
+        if (wakeUpAllReaders) {
             reading.signalAll();
         } else {
             reading.signal();
@@ -53,6 +63,7 @@ class Book {
         // System.out.println(String.format("Writer-exit: %s is about to leave...", Thread.currentThread().getName()));
 
         lock.unlock();
+        return tmpCounter;
     }
 
     public void enterReading(){
@@ -67,7 +78,7 @@ class Book {
             }
         }
         readersNumber++;
-
+        readersInARowCounter++;
         // System.out.println(String.format("Reader-entry: %s is about to enter...", Thread.currentThread().getName()));
 
         lock.unlock();
@@ -77,7 +88,7 @@ class Book {
         lock.lock();
 
         readersNumber--;
-        if (this.wakeUpAllReaders) {
+        if (wakeUpAllReaders) {
             reading.signalAll();
         } else {
             reading.signal();
@@ -89,9 +100,13 @@ class Book {
         lock.unlock();
     }
 
-    public void write() {
+    /**
+     * Writer's critical section.
+     * @returns The number of readers entered in a row before a writer got the resource.
+     */
+    public int write() {
         enterWriting();
-        leaveWriting();
+        return leaveWriting();
     }
 
     public void read() {
