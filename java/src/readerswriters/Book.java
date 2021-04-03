@@ -24,7 +24,7 @@ class Book {
         this.readersInARowCounter = 0;
     }
 
-    public void enterWriting(){
+    private void enterWriting(){
         lock.lock();
 
         while(isWriting == true || readersNumber > 0){
@@ -46,7 +46,7 @@ class Book {
      * Writer leaves its critical section.
      * @returns The number of readers entered in a row before a writer got the resource.
      */
-    public int leaveWriting(){
+    private int leaveWriting(){
         lock.lock();
 
         isWriting = false;
@@ -66,7 +66,7 @@ class Book {
         return tmpCounter;
     }
 
-    public void enterReading(){
+    private void enterReading(){
         lock.lock();
 
         while(isWriting == true || readersNumber >= maxReaders){
@@ -84,7 +84,7 @@ class Book {
         lock.unlock();
     }
 
-    public void leaveReading(){
+    private void leaveReading(){
         lock.lock();
 
         readersNumber--;

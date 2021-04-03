@@ -27,11 +27,15 @@ public class ReadersWriters {
         if(args.length == 0 || args[0].trim().isEmpty()){
             System.out.println("You have to provide a path (where the results will be saved) as a command line argument!");
         }
-        else if(args.length == 1 || (args[1].toLowerCase(Locale.ROOT) == "true" && args[1].toLowerCase(Locale.ROOT) == "false" )){
+        else if(args.length == 1 || (args[1].toLowerCase(Locale.ROOT) != "true" && args[1].toLowerCase(Locale.ROOT) != "false" )){
             System.out.println("You have specify if all readers has to be woken up (true/false) after the file path as a command line parameter!");
         }
         else{
             WAKE_UP_ALL_READERS = Boolean.valueOf(args[1]);
+
+            System.out.println("Output path: " + args[0]);
+            System.out.println("Waking up all readers: " + WAKE_UP_ALL_READERS);
+
             Collection<RuntimeResultDto> runtimeResults = new ArrayList<>();
 
             for(double parallelReadersRate : PARALLEL_READERS_RATE){
