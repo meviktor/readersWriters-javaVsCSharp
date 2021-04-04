@@ -11,9 +11,9 @@ namespace ReadersWritersDotnet
 {
     public static class Program
     {
-        private static readonly int[] READERS_NUMBER = new int[]{5, 10, 50, 10000};
-        private static readonly int[] WRITERS_NUMBER = new int[]{5, 10, 50, 10000};
-        private static readonly double[] PARALLEL_READERS_RATE = new double[]{0.9, 0.6, 0.3};
+        private static readonly int[] READERS_NUMBER = new int[] { 5, 10, 50, 1000, 10000, 100000 };
+        private static readonly int[] WRITERS_NUMBER = new int[] { 5, 10, 50, 1000, 10000, 100000 };
+        private static readonly double[] PARALLEL_READERS_RATE = new double[] { 0.9, 0.6, 0.3};
         private static readonly BlockingCollection<int> READERS_IN_A_ROW = new BlockingCollection<int>();
         private static bool WAKE_UP_ALL_READERS;
 
@@ -57,6 +57,7 @@ namespace ReadersWritersDotnet
                 for(var rIndex = 0; rIndex < WRITERS_NUMBER.Length; rIndex++){
                     resultMatrix[wIndex, rIndex] =
                             (double)RunReadersWritersWithParams(READERS_NUMBER[rIndex], WRITERS_NUMBER[wIndex], parallelReadersRate, WAKE_UP_ALL_READERS, stopwatch) / 1000;
+                    Console.WriteLine($"Parallel readers: {parallelReadersRate * 100}%, readers: {READERS_NUMBER[rIndex]}, writers: {WRITERS_NUMBER[wIndex]}, time: {resultMatrix[wIndex, rIndex]} sec");
                 }
             }
             return resultMatrix;
@@ -66,7 +67,7 @@ namespace ReadersWritersDotnet
             var book = new BookWithConditionVariable(CalculateMaxReaders(readersNumber, parallelReadersRate), wakeUpAllReaders);
             IList<Thread> readersAndWriters = new List<Thread>();
 
-            stopwatch.Start();
+            stopwatch.Restart();
             
             for(var i = 0;;i++){
                 if(i < readersNumber){
