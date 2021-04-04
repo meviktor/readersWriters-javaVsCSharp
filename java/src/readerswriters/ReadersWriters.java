@@ -13,9 +13,9 @@ import java.util.stream.Collectors;
 import java.util.stream.Stream;
 
 public class ReadersWriters {
-    private static final int[] READERS_NUMBER = new int[]{5, 10, 50, 500, 10000, 100000};
-    private static final int[] WRITERS_NUMBER = new int[]{5, 10, 50, 500, 10000, 100000};
-    private static final double[] PARALLEL_READERS_RATE = new double[]{0.3, 0.6, 0.9};
+    private static final int[] READERS_NUMBER = new int[]{5, 10, 50, 1000, 10000, 100000};
+    private static final int[] WRITERS_NUMBER = new int[]{5, 10, 50, 1000, 10000, 100000};
+    private static final double[] PARALLEL_READERS_RATE = new double[]{0.9, 0.6, 0.3};
     private static final Collection<Integer> READERS_IN_A_ROW = Collections.synchronizedCollection(new ArrayList<>());
     private static boolean WAKE_UP_ALL_READERS;
 
@@ -27,7 +27,7 @@ public class ReadersWriters {
         if(args.length == 0 || args[0].trim().isEmpty()){
             System.out.println("You have to provide a path (where the results will be saved) as a command line argument!");
         }
-        else if(args.length == 1 || (args[1].toLowerCase(Locale.ROOT) != "true" && args[1].toLowerCase(Locale.ROOT) != "false" )){
+        else if(args.length == 1 || (args[1].equals("true") && args[1].equals("false"))){
             System.out.println("You have specify if all readers has to be woken up (true/false) after the file path as a command line parameter!");
         }
         else{
