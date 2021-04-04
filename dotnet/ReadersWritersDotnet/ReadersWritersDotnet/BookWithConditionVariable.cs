@@ -2,7 +2,7 @@ using ReadersWritersDotnet.Condition;
 
 namespace ReadersWritersDotnet
 {
-    public class BookWithConditionVariable
+    public class BookWithConditionVariable : IBook
     {
         private readonly int _maxReaders;
         private readonly bool _wakeUpAllReaders;

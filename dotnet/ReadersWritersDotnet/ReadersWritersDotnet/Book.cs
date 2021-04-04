@@ -3,7 +3,7 @@ using System.Threading;
 
 namespace ReadersWritersDotnet
 {
-    public class Book
+    public class Book : IBook
     {
         private readonly int _maxReaders;
         private readonly bool _wakeUpAllReaders;

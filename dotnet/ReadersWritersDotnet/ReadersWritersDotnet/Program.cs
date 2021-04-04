@@ -16,15 +16,16 @@ namespace ReadersWritersDotnet
         private static readonly double[] PARALLEL_READERS_RATE = new double[] { 0.9, 0.6, 0.3};
         private static readonly BlockingCollection<int> READERS_IN_A_ROW = new BlockingCollection<int>();
         private static bool WAKE_UP_ALL_READERS;
+        private static bool WITH_CONDITIONS;
 
         private static readonly ParameterizedThreadStart _reader = (book) =>
         {
-            ((BookWithConditionVariable)book)!.Read();
+            ((IBook)book)!.Read();
         };
 
         private static readonly ParameterizedThreadStart _writer = (book) =>
         {
-            var readersInARowBeforeMe = ((BookWithConditionVariable)book)!.Write();
+            var readersInARowBeforeMe = ((IBook)book)!.Write();
             READERS_IN_A_ROW.Add(readersInARowBeforeMe);
         };
         
@@ -63,8 +64,14 @@ namespace ReadersWritersDotnet
             return resultMatrix;
         }
 
-        private static long RunReadersWritersWithParams(int readersNumber, int writersNumber, double parallelReadersRate, bool wakeUpAllReaders, Stopwatch stopwatch){
-            var book = new BookWithConditionVariable(CalculateMaxReaders(readersNumber, parallelReadersRate), wakeUpAllReaders);
+        private static long RunReadersWritersWithParams(int readersNumber, int writersNumber, double parallelReadersRate, bool wakeUpAllReaders, Stopwatch stopwatch)
+        {
+            IBook book = WITH_CONDITIONS
+                ? new BookWithConditionVariable(CalculateMaxReaders(readersNumber, parallelReadersRate), wakeUpAllReaders)
+                : new Book(CalculateMaxReaders(readersNumber, parallelReadersRate), wakeUpAllReaders);
+            
+            Console.WriteLine($"Created book type {book.GetType()}");
+            
             IList<Thread> readersAndWriters = new List<Thread>();
 
             stopwatch.Restart();
@@ -114,6 +121,11 @@ namespace ReadersWritersDotnet
             if(args.Length == 1 || (args[1].ToLower() != "true" && args[1].ToLower() != "false" )){
                 Console.WriteLine("You have specify if all readers has to be woken up (true/false) after the output file path as a command line argument!");
                 return false;
+            }
+
+            if (args.Length == 3 && args[2].Equals("condition"))
+            {
+                WITH_CONDITIONS = true;
             }
 
             var dir = Path.GetDirectoryName(args[0]);
